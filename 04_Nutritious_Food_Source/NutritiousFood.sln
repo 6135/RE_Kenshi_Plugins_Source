@@ -1,0 +1,18 @@
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.28701.123
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "NutritiousFood", "NutritiousFood\NutritiousFood.vcxproj", "{B2D4E7A9-1C35-4F68-9A02-C7E5D4186B30}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B2D4E7A9-1C35-4F68-9A02-C7E5D4186B30}.Debug|x64.ActiveCfg = Debug|x64
+		{B2D4E7A9-1C35-4F68-9A02-C7E5D4186B30}.Debug|x64.Build.0 = Debug|x64
+		{B2D4E7A9-1C35-4F68-9A02-C7E5D4186B30}.Release|x64.ActiveCfg = Release|x64
+		{B2D4E7A9-1C35-4F68-9A02-C7E5D4186B30}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+EndGlobal
