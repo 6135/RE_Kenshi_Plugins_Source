@@ -1,0 +1,2 @@
+Build the Release|x64 configuration, then place GuardBreakBash.dll in this folder.
+The source package does not contain a compiled DLL.
