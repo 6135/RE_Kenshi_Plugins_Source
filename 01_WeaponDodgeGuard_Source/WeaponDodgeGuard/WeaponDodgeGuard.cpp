@@ -43,6 +43,8 @@ namespace
         int animationMode;
         bool logDiscoveredTechniques;
         bool logSelectedAnimation;
+        bool adaptivePriorityEnabled;
+        bool logPriorityDecisions;
         std::set<std::string> allowedAnimations;
         std::set<std::string> blockedAnimations;
 
@@ -59,7 +61,9 @@ namespace
               dodgeCooldownMs(0),
               animationMode(ANIMATION_VANILLA_ONLY),
               logDiscoveredTechniques(false),
-              logSelectedAnimation(false)
+              logSelectedAnimation(false),
+              adaptivePriorityEnabled(false),
+              logPriorityDecisions(false)
         {
         }
     };
@@ -171,6 +175,32 @@ namespace
         return result;
     }
 
+    bool ReadBool(const char* section, const char* key, bool fallback)
+    {
+        char buffer[64] = { 0 };
+        const char* fallbackText = fallback ? "1" : "0";
+
+        GetPrivateProfileStringA(
+            section,
+            key,
+            fallbackText,
+            buffer,
+            sizeof(buffer),
+            g_iniPath.c_str());
+
+        std::string value = ToLowerAscii(Trim(buffer));
+
+        if (value == "1" || value == "true" ||
+            value == "yes" || value == "on")
+            return true;
+
+        if (value == "0" || value == "false" ||
+            value == "no" || value == "off")
+            return false;
+
+        return fallback;
+    }
+
     void ParseAnimationList(
         const char* section,
         const char* key,
@@ -242,6 +272,31 @@ namespace
             GetPrivateProfileIntA("Animations", "LogDiscoveredTechniques", 0, g_iniPath.c_str()) != 0;
         g_settings.logSelectedAnimation =
             GetPrivateProfileIntA("Animations", "LogSelectedAnimation", 0, g_iniPath.c_str()) != 0;
+        // Adaptive Priority is opt-in. Missing settings preserve the
+        // pre-v1.2 Weapon Dodge & Guard behavior.
+        //
+        // Official key:
+        //   AdaptivePriority=0 / 1 / false / true
+        //
+        // The old QA key "Enabled" is accepted as a compatibility fallback.
+        char adaptivePriorityBuffer[64] = { 0 };
+        GetPrivateProfileStringA(
+            "Priority",
+            "AdaptivePriority",
+            "",
+            adaptivePriorityBuffer,
+            sizeof(adaptivePriorityBuffer),
+            g_iniPath.c_str());
+
+        if (adaptivePriorityBuffer[0] != '\0')
+            g_settings.adaptivePriorityEnabled =
+                ReadBool("Priority", "AdaptivePriority", false);
+        else
+            g_settings.adaptivePriorityEnabled =
+                ReadBool("Priority", "Enabled", false);
+
+        g_settings.logPriorityDecisions =
+            ReadBool("Priority", "LogDecisions", false);
         ParseAnimationList(
             "Animations", "AllowedAnimations", g_settings.allowedAnimations);
         ParseAnimationList(
@@ -272,6 +327,8 @@ namespace
             << ", AnimationMode=" << g_settings.animationMode
             << ", LogDiscoveredTechniques=" << BoolText(g_settings.logDiscoveredTechniques)
             << ", LogSelectedAnimation=" << BoolText(g_settings.logSelectedAnimation)
+            << ", AdaptivePriority=" << BoolText(g_settings.adaptivePriorityEnabled)
+            << ", LogPriorityDecisions=" << BoolText(g_settings.logPriorityDecisions)
             << ", AllowedAnimations=" << g_settings.allowedAnimations.size()
             << ", BlockedAnimations=" << g_settings.blockedAnimations.size()
             << ", MaxLines=" << g_settings.maxLogLines;
@@ -711,6 +768,7 @@ namespace
             << " armed=" << BoolText(!stats->isUnarmed())
             << " opponentAttack=" << opponentAttackSkill
             << " dodgeEffective=" << stats->getDodge(true)
+            << " meleeDefenceEffective=" << stats->getMeleeDefence(true)
             << " dodgePenaltyGear=" << stats->getDodgePenalty_gear()
             << " dodgePenaltyEncumbrance=" << stats->getDodgePenalty_encumbrance()
             << " dodgePenaltyInjuries=" << stats->getDodgePenalty_injuries()
@@ -725,6 +783,26 @@ namespace
                 << " selected={" << TechniqueDescription(selected) << "}";
         }
         Log(out.str());
+    }
+
+    bool ShouldSuppressWeaponDodgeByPriority(
+        CharStats* stats,
+        float& dodgeEffective,
+        float& meleeDefenceEffective)
+    {
+        dodgeEffective = 0.0f;
+        meleeDefenceEffective = 0.0f;
+
+        if (!g_settings.adaptivePriorityEnabled || !stats)
+            return false;
+
+        dodgeEffective = stats->getDodge(true);
+        meleeDefenceEffective = stats->getMeleeDefence(true);
+
+        // Equal values preserve the traditional Weapon Dodge behavior.
+        // Adaptive Priority suppresses only when effective Melee Defence is
+        // strictly higher than effective Dodge.
+        return dodgeEffective < meleeDefenceEffective;
     }
 
     CombatTechniqueData* __fastcall ChooseBlockHook(
@@ -760,14 +838,50 @@ namespace
             const char* eligibilityReason = "unknown";
             if (IsEligibleForAddedDodge(thisptr, original, eligibilityReason))
             {
-                const DWORD now = GetTickCount();
-                if (!IsCooldownReady(thisptr->me, now))
+                float priorityDodge = 0.0f;
+                float priorityDefence = 0.0f;
+
+                if (ShouldSuppressWeaponDodgeByPriority(
+                        thisptr, priorityDodge, priorityDefence))
                 {
-                    decision = "dodge-cooldown-block-fallback";
+                    decision = "adaptive-priority-defense-higher";
                     InterlockedIncrement(&g_blockFallback);
+
+                    if (g_settings.logPriorityDecisions)
+                    {
+                        std::ostringstream priorityLog;
+                        priorityLog << std::fixed << std::setprecision(3)
+                            << "Adaptive priority: character=" << thisptr->me
+                            << " dodgeEffective=" << priorityDodge
+                            << " meleeDefenceEffective=" << priorityDefence
+                            << " priority=defence"
+                            << " weaponDodge=suppressed";
+                        Log(priorityLog.str());
+                    }
                 }
                 else
                 {
+                    if (g_settings.logPriorityDecisions &&
+                        g_settings.adaptivePriorityEnabled)
+                    {
+                        std::ostringstream priorityLog;
+                        priorityLog << std::fixed << std::setprecision(3)
+                            << "Adaptive priority: character=" << thisptr->me
+                            << " dodgeEffective=" << priorityDodge
+                            << " meleeDefenceEffective=" << priorityDefence
+                            << " priority=dodge"
+                            << " weaponDodge=enabled";
+                        Log(priorityLog.str());
+                    }
+
+                    const DWORD now = GetTickCount();
+                    if (!IsCooldownReady(thisptr->me, now))
+                    {
+                        decision = "dodge-cooldown-block-fallback";
+                        InterlockedIncrement(&g_blockFallback);
+                    }
+                    else
+                    {
                     vanillaDodgeChance =
                         Clamp(thisptr->calculateDodgeChance(opponentAttackSkill, false), 0.0f, 100.0f);
                     adjustedDodgeChance = Clamp(
@@ -812,6 +926,7 @@ namespace
                         decision = "dodge-roll-failed-block-fallback";
                         InterlockedIncrement(&g_blockFallback);
                     }
+                    }
                 }
             }
             else
@@ -835,7 +950,7 @@ __declspec(dllexport) void startPlugin()
     LoadSettings();
     srand(GetTickCount());
 
-    Log("Weapon Dodge & Guard v1.1.0-rc1 starting. Animation compatibility modes are enabled; automatic technique-list discovery and runtime capture are active.");
+    Log("Weapon Dodge & Guard v1.2.0-rc1 starting. Animation compatibility modes are enabled; automatic technique-list discovery and runtime capture are active.");
 
     const intptr_t target = KenshiLib::GetRealAddress(&CharStats::chooseBlock);
     g_chooseBlockTarget = target;
@@ -852,5 +967,5 @@ __declspec(dllexport) void startPlugin()
         return;
     }
 
-    Log("Weapon Dodge & Guard v1.1.0-rc1 loaded and chooseBlock hook installed.");
+    Log("Weapon Dodge & Guard v1.2.0-rc1 loaded and chooseBlock hook installed.");
 }

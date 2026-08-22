@@ -1,49 +1,151 @@
-# Weapon Dodge & Guard v1.1.0-rc1
+# Weapon Dodge & Guard v1.2.0
 
-武器装備中でも回避を先に判定し、回避しなかった場合はKenshiが本来選んだ武器防御へ戻すRE_Kenshi用プラグインです。v1.1では、回避アニメーション追加MODが登録した通常回避技にも対応します。
+## 概要
 
-## AnimationMode
+v1.1.0-rc1までの既存挙動をデフォルトのまま維持しつつ、任意機能 `Adaptive Priority` を追加しました。
 
-- `0 = VanillaOnly`：バニラの`dodgeback`だけを使用
-- `1 = Compatible`：自動検出した通常立ち回避技を使用
-- `2 = CustomAllowList`：`AllowedAnimations`に記載した技だけを使用
+既定値では Adaptive Priority は **OFF** です。
 
-Compatibleモードでは、`isDodge=true`、`stumbleDodge=false`、`isProne=false`の技を候補にし、`minSkill`／`maxSkill`を確認し、`chanceMult`を相対重みとして選択します。`Taunt`／`Battlecry`系は自動除外します。
+したがって、INIを変更しないユーザーの戦闘挙動は従来版と同じです。
 
-## 設定例
+---
 
-```ini
-AnimationMode=1
-BlockedAnimations=Roll dodge
-```
+## Adaptive Priority
+
+`WeaponDodgeGuard.ini`
 
 ```ini
-AnimationMode=2
-AllowedAnimations=Fast dodge | GROUNDED_DodgeL2
+[Priority]
+AdaptivePriority=0
 ```
 
-## maxEncumbranceについて
+### OFF（既定）
 
-`maxEncumbrance`は候補判定に使用しません。
+```ini
+AdaptivePriority=0
+```
 
-調査では、Kenshi本体が`maxEncumbrance=25`の技を、`getDodgePenalty_encumbrance()`が-100を大きく下回る状況でも選択しました。そのため、両者を直接比較する実装は誤りと判断しました。
+または
 
-正確な内部用途が確認できるまでは推測制限を入れません。装備・重量による回避成功率低下自体は、Kenshi本体の`calculateDodgeChance()`を通じて維持されます。
+```ini
+AdaptivePriority=false
+```
 
-## 確認済み
+従来どおり Weapon Dodge & Guard が動作します。
 
-- 起動直後から武器装備中の回避
-- 1対1・多人数戦
-- セーブ／ロード・ゲーム再起動
-- バニラ回避
-- 回避アニメーションMODの追加技
-- Taunt／Battlecry系の除外
-- AllowedAnimations／BlockedAnimations
-- 明確な経験値異常・硬直・クラッシュなし
+### ON
 
-## RC確認項目
+```ini
+AdaptivePriority=1
+```
 
-- `AnimationMode=0`で`dodgeback`だけになる
-- `AnimationMode=1`で追加回避が出る
-- `AnimationMode=2`で許可した技だけになる
-- 通常ログ無効の状態で長時間安定する
+または
+
+```ini
+AdaptivePriority=true
+```
+
+戦闘時にKenshiの実効値を比較します。
+
+```text
+Effective Dodge >= Effective Melee Defence
+→ Weapon Dodge有効
+
+Effective Dodge < Effective Melee Defence
+→ その攻撃ではWeapon Dodgeの追加回避を抑止
+→ Kenshi本来の武器防御経路をそのまま使用
+```
+
+同値の場合は従来のWeapon Dodgeを優先します。
+
+---
+
+## 設計上の重要点
+
+この機能は特定の「防御→回避」MODを必要としません。
+
+Adaptive Priorityが行うのは、
+
+**Weapon Dodge & Guard自身の先行回避を、その攻撃で許可するか抑止するか**
+
+だけです。
+
+その後の防御失敗時の挙動はKenshi本体または他MODに任せます。
+
+そのため、将来の戦闘拡張MODとの組み合わせも想定できます。
+
+防御失敗後に回避を追加する対応MODと併用した場合、想定する流れは次のとおりです。
+
+```text
+回避が高い：
+回避 → 防御 → 回避
+
+防御が高い：
+防御 → 回避
+```
+
+回避が高い場合は回避判定が2回になる可能性がありますが、他MOD側の挙動へ介入しないことを優先しています。
+
+---
+
+## 実効値
+
+比較にはKenshiLibの専用取得関数を使用します。
+
+```cpp
+stats->getDodge(true)
+stats->getMeleeDefence(true)
+```
+
+QAでは、回避・防御を上下させる装備を戦闘中に変更した際、優先順位が即時に切り替わることを確認しています。
+
+---
+
+## ログ
+
+通常は：
+
+```ini
+LogDecisions=0
+```
+
+問題調査時のみ：
+
+```ini
+LogDecisions=1
+```
+
+有効時には概ね次の形式で記録されます。
+
+```text
+Adaptive priority:
+dodgeEffective=...
+meleeDefenceEffective=...
+priority=dodge
+weaponDodge=enabled
+```
+
+または
+
+```text
+priority=defence
+weaponDodge=suppressed
+```
+
+---
+
+## 互換性
+
+Adaptive Priority OFF時は、従来版と同じ挙動を維持します。
+
+Adaptive Priority ON時でも、Defence優勢時には新しい防御処理を作らず、Weapon Dodgeによる先行回避を追加しないだけです。
+
+特定の「防御→回避」MODを必須にはしていません。Weapon Dodge & Guardは単独でも使用できます。
+
+---
+
+## 注意
+
+Steam Workshop更新では配布INIが更新される可能性があります。
+
+既存の `WeaponDodgeGuard.ini` をカスタマイズしている場合は、アップデート前に設定内容を控えておくことを推奨します。

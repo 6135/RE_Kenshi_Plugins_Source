@@ -1,17 +1,32 @@
 # Changelog
 
-## 1.1.0-rc1
+## v1.2.0-rc1
 
-- 回避アニメーションMOD互換機能を正式版候補として整理
-- AnimationMode 0/1/2を実装
-- AllowedAnimations／BlockedAnimationsを追加
-- Taunt／Battlecry系を自動除外
-- minSkill／maxSkillを候補判定に使用
-- chanceMultを相対選択重みに使用
-- 通常ログを既定で無効化
-- maxEncumbranceは意味未確定のため推測適用しない方針を明記
+### Added
 
-## 1.0.0
+- Optional Adaptive Priority.
+- Default is OFF to preserve the behavior of previous releases.
+- Accepts both numeric and boolean-style values:
+  - `AdaptivePriority=0`
+  - `AdaptivePriority=1`
+  - `AdaptivePriority=false`
+  - `AdaptivePriority=true`
+- Compares effective Dodge and effective Melee Defence at combat time.
+- When effective Melee Defence is strictly higher, Weapon Dodge does not add
+  its pre-block dodge for that attack.
+- Equal values preserve the normal Weapon Dodge behavior.
+- Optional priority decision logging.
 
-- 武器装備中に回避を先に判定
-- 回避しなかった場合は元の武器防御へ戻す
+### Compatibility
+
+- No dependency on any particular block-then-dodge mod.
+- The feature only controls Weapon Dodge & Guard's own pre-block dodge.
+- The original Kenshi weapon-block path is left untouched when suppressed.
+
+### Defaults
+
+```ini
+[Priority]
+AdaptivePriority=0
+LogDecisions=0
+```

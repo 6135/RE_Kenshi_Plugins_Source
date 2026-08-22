@@ -1,80 +1,149 @@
-# Weapon Dodge & Guard v1.1.0 RC1
+# Weapon Dodge & Guard v1.2.0
 
-A RE_Kenshi plugin that checks Dodge first even while a weapon is equipped. If the dodge attempt fails, combat falls back to the weapon block originally selected by Kenshi.
+## Overview
 
-Version 1.1 also supports standard dodge animations added by dodge animation mods.
+v1.2.0 adds the optional `Adaptive Priority` feature while preserving the previous Weapon Dodge & Guard behavior by default.
 
----
+Adaptive Priority is **OFF by default**.
 
-## AnimationMode
-
-- `0 = VanillaOnly`
-  Uses only the vanilla `dodgeback` animation.
-
-- `1 = Compatible`
-  Automatically detects and uses compatible standing dodge animations.
-
-- `2 = CustomAllowList`
-  Uses only the animations listed in `AllowedAnimations`.
-
-In **Compatible** mode, the plugin searches for techniques that satisfy the following conditions:
-
-- `isDodge = true`
-- `stumbleDodge = false`
-- `isProne = false`
-
-It also checks `minSkill` and `maxSkill`, and uses `chanceMult` as the relative selection weight.
-
-`Taunt` and `Battlecry` animations are automatically excluded.
+Users who do not enable it will therefore retain the previous combat behavior.
 
 ---
 
-## Configuration Examples
+## Adaptive Priority
+
+`WeaponDodgeGuard.ini`
 
 ```ini
-AnimationMode=1
-BlockedAnimations=Roll dodge
+[Priority]
+AdaptivePriority=0
 ```
+
+### OFF (Default)
 
 ```ini
-AnimationMode=2
-AllowedAnimations=Fast dodge | GROUNDED_DodgeL2
+AdaptivePriority=0
+```
+
+or
+
+```ini
+AdaptivePriority=false
+```
+
+Weapon Dodge & Guard behaves as before.
+
+### ON
+
+```ini
+AdaptivePriority=1
+```
+
+or
+
+```ini
+AdaptivePriority=true
+```
+
+During combat, the plugin compares Kenshi's effective values:
+
+```text
+Effective Dodge >= Effective Melee Defence
+→ Weapon Dodge enabled
+
+Effective Dodge < Effective Melee Defence
+→ Weapon Dodge's additional pre-block dodge is suppressed for that attack
+→ Kenshi's original weapon-block path is left untouched
+```
+
+When the values are equal, the normal Weapon Dodge behavior is retained.
+
+---
+
+## Design Notes
+
+This feature does not require any specific Guard → Dodge mod.
+
+Adaptive Priority only decides whether:
+
+**Weapon Dodge & Guard's own pre-block dodge is allowed or suppressed for that attack.**
+
+What happens after a failed guard is left to Kenshi itself or other mods.
+
+This also allows the feature to work alongside future combat extensions without depending on a particular implementation.
+
+When used with a compatible mod that adds Dodge after a failed Guard, the intended flow is:
+
+```text
+Higher Dodge:
+Dodge → Guard → Dodge
+
+Higher Defence:
+Guard → Dodge
+```
+
+High-Dodge characters may therefore receive two dodge opportunities. This is intentional: avoiding interference with the behavior of other mods was prioritized over altering their mechanics.
+
+---
+
+## Effective Values
+
+The comparison uses KenshiLib's dedicated effective-stat functions:
+
+```cpp
+stats->getDodge(true)
+stats->getMeleeDefence(true)
+```
+
+During QA, changing equipment that raised or lowered Dodge or Melee Defence during combat caused the priority to switch immediately as the effective values changed.
+
+---
+
+## Logging
+
+Normally use:
+
+```ini
+LogDecisions=0
+```
+
+For troubleshooting only:
+
+```ini
+LogDecisions=1
+```
+
+When enabled, the log will contain entries similar to:
+
+```text
+Adaptive priority:
+dodgeEffective=...
+meleeDefenceEffective=...
+priority=dodge
+weaponDodge=enabled
+```
+
+or:
+
+```text
+priority=defence
+weaponDodge=suppressed
 ```
 
 ---
 
-## About maxEncumbrance
+## Compatibility
 
-`maxEncumbrance` is **not** used when determining animation candidates.
+With Adaptive Priority OFF, the previous Weapon Dodge & Guard behavior is preserved.
 
-Testing showed that Kenshi can select animations with `maxEncumbrance = 25` even when `getDodgePenalty_encumbrance()` is far below -100.
+With Adaptive Priority ON, when Melee Defence has priority the plugin does not create a new guard mechanic. It simply does not add Weapon Dodge's pre-block dodge for that attack.
 
-Because of this, directly comparing these two values was determined to be incorrect.
-
-Until the internal purpose of `maxEncumbrance` is fully understood, the plugin intentionally does not apply any assumptions or restrictions based on this value.
-
-The normal reduction in dodge chance caused by equipment weight and encumbrance is still handled by Kenshi itself through `calculateDodgeChance()`.
+No specific Guard → Dodge mod is required. Weapon Dodge & Guard can still be used on its own.
 
 ---
 
-## Verified
+## Note for Steam Workshop Users
 
-- Dodge works immediately after game startup while wielding a weapon
-- One-on-one combat
-- Group combat
-- Save / Load
-- Game restart
-- Vanilla dodge animation
-- Dodge animations added by animation mods
-- Automatic exclusion of Taunt / Battlecry animations
-- AllowedAnimations / BlockedAnimations
-- No confirmed abnormal experience gain, soft lock, or crashes
+Steam Workshop updates may replace the distributed INI file.
 
----
-
-## RC Checklist
-
-- `AnimationMode=0` uses only `dodgeback`
-- `AnimationMode=1` uses automatically detected dodge animations
-- `AnimationMode=2` uses only animations listed in `AllowedAnimations`
-- Stable during extended gameplay with normal logging disabled
+If you have customized `WeaponDodgeGuard.ini`, it is recommended that you keep a copy of your settings before updating.
