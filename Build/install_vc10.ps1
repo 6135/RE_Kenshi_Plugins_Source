@@ -177,12 +177,28 @@ foreach ($entry in $required.GetEnumerator()) {
     Write-Host "found $($entry.Key)"
 }
 
-$banner = & $cl 2>&1 | Select-Object -First 1
-Write-Host "cl.exe banner: $banner"
-if ($banner -notmatch 'Version 16\.00') {
-    throw "Expected the Visual C++ 2010 compiler (Version 16.00) but found: $banner"
+# cl.exe writes its banner to stderr and its usage text to stdout, so the whole
+# merged output is searched rather than just the first line.
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+$clOutput = (& $cl 2>&1 | Out-String)
+$ErrorActionPreference = $previousPreference
+
+$versionMatch = [regex]::Match($clOutput, 'Version (\d+)\.(\d+)\.\S+\s+for\s+(\S+)')
+if (-not $versionMatch.Success) {
+    Write-Host "cl.exe output was:"
+    Write-Host $clOutput
+    throw "Could not read a version banner from the staged compiler."
 }
-if ($banner -notmatch 'x64') {
+
+$banner = $versionMatch.Value
+$majorVersion = $versionMatch.Groups[1].Value
+$target = $versionMatch.Groups[3].Value
+Write-Host "cl.exe banner: $banner"
+if ($majorVersion -ne '16') {
+    throw "Expected the Visual C++ 2010 compiler (Version 16.xx) but found: $banner"
+}
+if ($target -ne 'x64') {
     throw "Expected the x64 compiler but found: $banner"
 }
 
