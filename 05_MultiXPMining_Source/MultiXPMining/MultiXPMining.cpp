@@ -37,7 +37,7 @@ public:
 namespace
 {
     const char* const kPluginName = "MultiXPMining";
-    const char* const kPluginVersion = "1.0.0-rc3";
+    const char* const kPluginVersion = "1.0.0-rc4";
     const unsigned int kSupportedConfigVersion = 1;
     const unsigned int kSupportedSourceDataVersion = 1;
 
@@ -162,9 +162,14 @@ namespace
         std::string stringId;
         int dataId;
         int useableStat;
+        // Which AI task handle the equipment was resolved from, and whether the
+        // character is registered as one of its current operators.
+        const char* origin;
+        bool operatorConfirmed;
 
         UseableIdentity()
-            : valid(false), dataId(0), useableStat(static_cast<int>(STAT_NONE)) {}
+            : valid(false), dataId(0), useableStat(static_cast<int>(STAT_NONE)),
+              origin("None"), operatorConfirmed(false) {}
     };
 
     typedef void (*XpStatTimeBasedFn)(CharStats* stats, StatsEnumerated stat);
@@ -179,6 +184,7 @@ namespace
     bool g_stateLockInitialised = false;
     std::map<SessionKey, SessionState> g_sessions;
     std::map<CharStats*, ProportionalState> g_proportionalStates;
+    std::map<CharStats*, DWORD> g_unresolvedLogTicks;
     std::map<std::string, SourceSettings> g_sourceSettings;
     std::set<std::string> g_unknownSourcesWritten;
     unsigned int g_writtenEntries = 0;
@@ -239,6 +245,64 @@ namespace
         return out.str();
     }
 
+    typedef std::set<hand, std::less<hand>, Ogre::STLAllocator<hand, Ogre::GeneralAllocPolicy > > OperatorSet;
+
+    bool IsCurrentOperator(UseableStuff* useable, Character* character)
+    {
+        if (!useable || !character)
+        {
+            return false;
+        }
+
+        for (OperatorSet::const_iterator it = useable->currentOperators.begin();
+             it != useable->currentOperators.end(); ++it)
+        {
+            if (!it->isValid() || it->isNull())
+            {
+                continue;
+            }
+            if (it->getCharacter() == character)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Resolves one AI task handle into a useable equipment identity.
+    // Returns false when the handle does not point at usable equipment.
+    bool TryResolveUseableHandle(Character* character, const hand& candidate,
+        const char* origin, UseableIdentity& identity)
+    {
+        identity = UseableIdentity();
+        if (!candidate.isValid() || candidate.isNull())
+        {
+            return false;
+        }
+
+        Building* building = candidate.getBuilding();
+        if (!building)
+        {
+            return false;
+        }
+
+        UseableStuff* useable = building->getUseableStuff();
+        GameData* data = building->getGameData();
+        if (!useable || !data || !data->isValid())
+        {
+            return false;
+        }
+
+        identity.valid = true;
+        identity.displayName = building->getName();
+        identity.stringId = data->stringID;
+        identity.dataId = data->id;
+        identity.useableStat = static_cast<int>(useable->getStatUsed());
+        identity.origin = origin;
+        identity.operatorConfirmed = IsCurrentOperator(useable, character);
+        return true;
+    }
+
     bool TryGetCurrentUseableIdentity(Character* character, UseableIdentity& identity)
     {
         identity = UseableIdentity();
@@ -260,30 +324,46 @@ namespace
         }
 
         const TaskMatch& goal = taskSystem->getCurrentGoal();
-        if (!goal.subject.isValid() || goal.subject.isNull())
+
+        // Player orders such as OPERATE_MACHINERY carry the equipment in the goal
+        // subject. Goals that pick their own target at runtime - among them the
+        // slave labour goals that run on AUTO_LABOURING_MINES - keep the chosen
+        // equipment in the goal subtarget and leave an unrelated subject, so a
+        // subject-only lookup never matched for slaves. Both handles are inspected,
+        // preferring one that lists the character as a current operator.
+        const hand* const candidates[] = { &goal.subject, &goal.subtarget };
+        const char* const origins[] = { "GoalSubject", "GoalSubtarget" };
+        const size_t candidateCount = sizeof(candidates) / sizeof(candidates[0]);
+
+        UseableIdentity fallback;
+        for (size_t i = 0; i < candidateCount; ++i)
         {
-            return false;
+            UseableIdentity candidate;
+            if (!TryResolveUseableHandle(character, *candidates[i], origins[i], candidate))
+            {
+                continue;
+            }
+            if (candidate.useableStat != static_cast<int>(STAT_LABOURING))
+            {
+                continue;
+            }
+            if (candidate.operatorConfirmed)
+            {
+                identity = candidate;
+                return true;
+            }
+            if (!fallback.valid)
+            {
+                fallback = candidate;
+            }
         }
 
-        Building* building = goal.subject.getBuilding();
-        if (!building)
+        if (fallback.valid)
         {
-            return false;
+            identity = fallback;
+            return true;
         }
-
-        UseableStuff* useable = building->getUseableStuff();
-        GameData* data = building->getGameData();
-        if (!useable || !data || !data->isValid())
-        {
-            return false;
-        }
-
-        identity.valid = true;
-        identity.displayName = building->getName();
-        identity.stringId = data->stringID;
-        identity.dataId = data->id;
-        identity.useableStat = static_cast<int>(useable->getStatUsed());
-        return true;
+        return false;
     }
 
     std::string Trim(const std::string& input)
@@ -410,6 +490,8 @@ namespace
         out << "; then set Enabled=true and configure the multipliers and caps.\r\n";
         out << "; This block is disabled by default for compatibility and safety.\r\n";
         out << "; DisplayName=" << identity.displayName << "\r\n";
+        out << "; Origin=" << identity.origin
+            << " OperatorConfirmed=" << (identity.operatorConfirmed ? "true" : "false") << "\r\n";
         out << "; ================================================================\r\n";
         out << "[" << identity.stringId << "]\r\n";
         out << "Enabled=false\r\n";
@@ -427,7 +509,8 @@ namespace
             std::ostringstream message;
             message << "[" << kPluginName << "] [WARNING] Unknown Source recorded"
                     << " StringID=\"" << identity.stringId << "\""
-                    << " DisplayName=\"" << identity.displayName << "\"";
+                    << " DisplayName=\"" << identity.displayName << "\""
+                    << " Origin=" << identity.origin;
             DebugLog(message.str());
         }
     }
@@ -748,6 +831,39 @@ namespace
         }
     }
 
+    // Labouring XP arrived but no mining equipment could be resolved from the AI
+    // task system. Reported at most once per XP summary interval per character so
+    // unusual work states can be diagnosed from the RE_Kenshi log.
+    void LogUnresolvedLabourSource(CharStats* stats)
+    {
+        if (!g_config.detailedLogging || !stats || !stats->me || !g_stateLockInitialised) return;
+
+        const DWORD now = GetTickCount();
+        bool shouldLog = false;
+
+        EnterCriticalSection(&g_stateLock);
+        std::map<CharStats*, DWORD>::iterator it = g_unresolvedLogTicks.find(stats);
+        if (it == g_unresolvedLogTicks.end())
+        {
+            g_unresolvedLogTicks[stats] = now;
+            shouldLog = true;
+        }
+        else if (now - it->second >= g_config.xpSummaryIntervalMs)
+        {
+            it->second = now;
+            shouldLog = true;
+        }
+        LeaveCriticalSection(&g_stateLock);
+
+        if (!shouldLog || !ReserveLogEntry()) return;
+
+        std::ostringstream message;
+        message << "[" << kPluginName << "] [WARNING] Labouring XP without a resolved mining source"
+                << " Character=0x" << std::hex << reinterpret_cast<uintptr_t>(stats->me) << std::dec
+                << " KenshiLibContext={" << CaptureKenshiLibTaskContext(stats->me) << "}";
+        DebugLog(message.str());
+    }
+
     void ApplyProportionalMultiXp(CharStats* stats)
     {
         if (!g_config.enabled || !stats || !stats->me ||
@@ -755,11 +871,16 @@ namespace
 
         UseableIdentity identity;
         SourceSettings sourceSettings;
-        if (!TryGetCurrentUseableIdentity(stats->me, identity) ||
-            !GetMiningSourceSettings(identity, sourceSettings)) return;
+        if (!TryGetCurrentUseableIdentity(stats->me, identity))
+        {
+            LogUnresolvedLabourSource(stats);
+            return;
+        }
+        if (!GetMiningSourceSettings(identity, sourceSettings)) return;
 
         bool logMatched = false;
         EnterCriticalSection(&g_stateLock);
+        g_unresolvedLogTicks.erase(stats);
         ProportionalState& state = g_proportionalStates[stats];
         if (state.sourceId != identity.stringId)
         {
@@ -813,6 +934,8 @@ namespace
                     << " Character=0x" << std::hex << reinterpret_cast<uintptr_t>(stats->me) << std::dec
                     << " StringID=\"" << identity.stringId << "\""
                     << " DisplayName=\"" << identity.displayName << "\""
+                    << " Origin=" << identity.origin
+                    << " OperatorConfirmed=" << (identity.operatorConfirmed ? "true" : "false")
                     << " Strength=" << sourceSettings.strengthMultiplier << "/" << sourceSettings.strengthCap
                     << " Toughness=" << sourceSettings.toughnessMultiplier << "/" << sourceSettings.toughnessCap
                     << " Dexterity=" << sourceSettings.dexterityMultiplier << "/" << sourceSettings.dexterityCap;
@@ -953,8 +1076,8 @@ __declspec(dllexport) void startPlugin()
     if (InstallObservationHooks())
     {
         DebugLog(std::string("[") + kPluginName + "] [INFO] Framework initialized.");
-        DebugLog(std::string("[") + kPluginName + "] [INFO] FrameworkVersion=1, MiningVersion=1.0.0-rc3, ConfigVersion=1, SourceDataVersion=1.");
-    DebugLog(std::string("[") + kPluginName + "] [INFO] BuildInfo: BuildDate=2026-07-25, Toolset=Visual Studio 2010 v100, Target=x64, TestedRE_Kenshi=0.3.4, TestedKenshiLib=0.4.0.");
+        DebugLog(std::string("[") + kPluginName + "] [INFO] FrameworkVersion=1, MiningVersion=1.0.0-rc4, ConfigVersion=1, SourceDataVersion=1.");
+    DebugLog(std::string("[") + kPluginName + "] [INFO] BuildInfo: BuildDate=2026-08-28, Toolset=Visual Studio 2010 v100, Target=x64, TestedRE_Kenshi=0.3.4, TestedKenshiLib=0.4.0.");
         DebugLog(std::string("[") + kPluginName + "] [INFO] SourceData controls supported equipment, XP multipliers, and skill caps.");
     }
     else

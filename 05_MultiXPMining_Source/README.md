@@ -1,4 +1,4 @@
-# Multi XP - Mining v1.0 RC3
+# Multi XP - Mining v1.0 RC4
 
 Final release-candidate source package for a RE_Kenshi/KenshiLib plugin that grants configurable additional stat XP while characters perform registered mining work.
 
@@ -17,6 +17,7 @@ Final release-candidate source package for a RE_Kenshi/KenshiLib plugin that gra
 - Each mining source has its own stat caps.
 - Machine-assisted sources are disabled by default.
 - Unknown Labouring sources are recorded safely and remain disabled.
+- Characters working as slaves are covered by the same rules as free characters.
 
 ## Configuration
 
@@ -33,8 +34,10 @@ Equipment definitions:
 
 Later INI files override earlier files key by key.
 
-## RC3 scope
+## RC4 scope
 
-RC3 adds no gameplay features. It freezes the Mining implementation for final validation, aligns version text, and records build information in the RE_Kenshi log.
+RC4 is a bug fix release candidate. Mining equipment used to be identified only from the current AI goal subject, which never held the equipment for slave labour, so slaves received no additional XP. Equipment is now also identified from the goal subtarget, and a match that lists the character among the equipment's current operators is preferred.
+
+`DetailedLogging=true` now also reports Labouring XP that arrives without a resolvable mining source, at most once per `XpSummaryIntervalMs` per character.
 
 Do not install this build beside an older `MiningStrengthXP` or `MultiXPMining` test build.

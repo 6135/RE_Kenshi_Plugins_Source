@@ -44,3 +44,9 @@ Set `EnableCaps=false` in `MultiXPMining.ini` to disable cap checks globally.
 When an unregistered Labouring source is used, the plugin writes a disabled template to `UnknownSources.ini`. Copy that section to `SourceData/99_UserOverride.ini`, then change the values you want.
 
 Unknown sources are never enabled automatically.
+
+Each recorded block also notes where the equipment was resolved from
+(`GoalSubject` or `GoalSubtarget`). Equipment worked by slaves is normally
+reported as `GoalSubtarget`; slave camp mines that are not part of the vanilla
+data pack appear here like any other unregistered source and have to be enabled
+by hand.
