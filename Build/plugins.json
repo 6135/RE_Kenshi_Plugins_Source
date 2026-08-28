@@ -1,0 +1,58 @@
+[
+  {
+    "name": "WeaponDodgeGuard",
+    "source": "01_WeaponDodgeGuard_Source/WeaponDodgeGuard/WeaponDodgeGuard.cpp",
+    "package": "01_WeaponDodgeGuard_Source/WeaponDodgeGuard/WeaponDodgeGuard",
+    "docs": "01_WeaponDodgeGuard_Source",
+    "dll": "WeaponDodgeGuard.dll"
+  },
+  {
+    "name": "AreaGuard",
+    "source": "02_AreaGuard_Source/AreaDamageGuardResearch/AreaGuard.cpp",
+    "package": "02_AreaGuard_Source/AreaDamageGuardResearch/AreaDamageGuardResearch",
+    "docs": "02_AreaGuard_Source",
+    "dll": "AreaGuard.dll"
+  },
+  {
+    "name": "TauntExpansion",
+    "source": "03_Taunt_Expansion_Source/TauntExpansion/TauntExpansion.cpp",
+    "package": "03_Taunt_Expansion_Source/ModPackage/TauntExpansion",
+    "docs": "03_Taunt_Expansion_Source",
+    "dll": "TauntExpansion.dll"
+  },
+  {
+    "name": "NutritiousFood",
+    "source": "04_Nutritious_Food_Source/NutritiousFood/NutritiousFood.cpp",
+    "package": "04_Nutritious_Food_Source/ModPackage/NutritiousFood",
+    "docs": "04_Nutritious_Food_Source",
+    "dll": "NutritiousFood.dll"
+  },
+  {
+    "name": "MultiXPMining",
+    "source": "05_MultiXPMining_Source/MultiXPMining/MultiXPMining.cpp",
+    "package": "05_MultiXPMining_Source/ModPackage/MultiXPMining",
+    "docs": "05_MultiXPMining_Source",
+    "dll": "MultiXPMining.dll"
+  },
+  {
+    "name": "MultiXPTraining",
+    "source": "06_MultiXPTraining_Source/MultiXPTraining/MultiXPTraining.cpp",
+    "package": "06_MultiXPTraining_Source/ModPackage/MultiXPTraining",
+    "docs": "06_MultiXPTraining_Source",
+    "dll": "MultiXPTraining.dll"
+  },
+  {
+    "name": "PartnerTraining",
+    "source": "07_PartnerTraining_Source/PartnerTraining/PartnerTraining.cpp",
+    "package": "07_PartnerTraining_Source/ModPackage/PartnerTraining",
+    "docs": "07_PartnerTraining_Source",
+    "dll": "PartnerTraining.dll"
+  },
+  {
+    "name": "GuardBreakBash",
+    "source": "08_GuardBreakBash_Source/Source/GuardBreakBash.cpp",
+    "package": "08_GuardBreakBash_Source/ReleaseTemplate/GuardBreakBash",
+    "docs": "08_GuardBreakBash_Source",
+    "dll": "GuardBreakBash.dll"
+  }
+]
