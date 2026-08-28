@@ -46,7 +46,10 @@ branches, on `v*` tags, and on demand.
 - **validate** (Ubuntu) — package and data-pack checks, no toolchain needed.
 - **build** (Windows) — provisions the toolchain, builds all eight plugins,
   uploads one zip per plugin plus the PDBs as artifacts.
-- **release** (tags only) — attaches those zips to a GitHub release.
+- **release** (tags only) — attaches those zips to a *draft* GitHub release,
+  so the packages can be checked before anyone can download them. Publish it
+  from the repository's Releases page when it looks right; drop `--draft` from
+  the workflow to publish automatically instead.
 
 Each zip contains the mod folder exactly as it is installed, with the plugin's
 README, CHANGELOG and licence beside it.
