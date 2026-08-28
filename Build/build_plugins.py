@@ -26,10 +26,18 @@ import subprocess
 import sys
 import zipfile
 
+# BOOST_ALL_NO_LIB disables Boost's #pragma comment(lib, ...) auto-linking.
+# Several KenshiLib headers include boost/thread, so the pragma asks for
+# libboost_thread-vc100-mt-1_60.lib even though the plugins only include those
+# headers for type layout and never call into a compiled Boost library. A local
+# Visual Studio build satisfies the pragma from BOOST_ROOT\stage\lib instead.
+# If a plugin ever does reference a Boost symbol the link fails with an
+# unresolved external rather than changing behaviour silently.
 COMPILE_FLAGS = [
     "/c", "/nologo", "/W3", "/O2", "/Oi", "/Gy", "/GL", "/EHsc", "/MD", "/GS",
     "/Zi", "/Zc:wchar_t", "/Zc:forScope", "/fp:precise",
     "/D", "NDEBUG", "/D", "_CONSOLE", "/D", "UNICODE", "/D", "_UNICODE", "/D", "_WINDLL",
+    "/D", "BOOST_ALL_NO_LIB",
 ]
 
 LINK_FLAGS = [

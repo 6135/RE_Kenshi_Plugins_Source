@@ -17,6 +17,11 @@ compiler — and invokes `cl.exe` and `link.exe` directly with flags that mirror
 each project's `Release|x64` settings. `build_plugins.py` documents that mapping
 at the top of the file.
 
+Only the Boost headers are fetched, never the compiled Boost libraries: the
+build defines `BOOST_ALL_NO_LIB` so Boost's auto-link pragma does not ask for
+`libboost_thread-vc100-mt-1_60.lib`, which the plugins never call into. A local
+Visual Studio build satisfies that pragma from `BOOST_ROOT\stage\lib` instead.
+
 The staged compiler is verified before anything is built: if the banner is not
 `Version 16.00 ... x64`, the build fails rather than silently producing a
 binary from the wrong toolset.
