@@ -1,0 +1,128 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      kenshilib_tag:
+        description: KenshiLib release to build against
+        default: v0.4.0
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  KENSHILIB_TAG: ${{ inputs.kenshilib_tag || 'v0.4.0' }}
+  BOOST_VERSION: 1.60.0
+
+jobs:
+  validate:
+    name: Validate packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check manifests and data packs
+        run: python Build/validate_packages.py
+
+  build:
+    name: Build plugins (v100)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      # The toolchain is staged into one directory so it can be restored as a unit.
+      # Provisioning it from the Windows SDK 7.1 media takes several minutes.
+      - name: Restore VC10 toolchain
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\vc10-toolchain
+          key: vc10-toolchain-sdk71-v1
+
+      - name: Provision the Visual C++ 2010 toolchain
+        shell: pwsh
+        run: |
+          ./Build/install_vc10.ps1 `
+            -ToolchainDir "${{ runner.temp }}\vc10-toolchain" `
+            -DownloadDir "${{ runner.temp }}\vc10-downloads"
+
+      - name: Cache KenshiLib and Boost
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}\deps
+          key: deps-${{ env.KENSHILIB_TAG }}-boost-${{ env.BOOST_VERSION }}-v1
+
+      - name: Fetch build dependencies
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >
+          python Build/fetch_deps.py
+          --dest "${{ runner.temp }}\deps"
+          --kenshilib-tag "${{ env.KENSHILIB_TAG }}"
+          --boost-version "${{ env.BOOST_VERSION }}"
+          --output "${{ runner.temp }}\deps.json"
+
+      - name: Resolve package version
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/*') {
+            $version = $env:GITHUB_REF -replace '^refs/tags/', ''
+          } else {
+            $version = "$($env:GITHUB_SHA.Substring(0,7))"
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Package version: $version"
+
+      - name: Build and package
+        run: >
+          python Build/build_plugins.py
+          --toolchain "${{ runner.temp }}\vc10-toolchain\toolchain.json"
+          --deps "${{ runner.temp }}\deps.json"
+          --out-dir "${{ github.workspace }}\dist"
+          --work-dir "${{ runner.temp }}\obj"
+          --version "${{ steps.version.outputs.version }}"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugins-${{ steps.version.outputs.version }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+      - name: Upload debug symbols
+        uses: actions/upload-artifact@v4
+        with:
+          name: symbols-${{ steps.version.outputs.version }}
+          path: ${{ runner.temp }}\obj\**\*.pdb
+          if-no-files-found: warn
+
+  release:
+    name: Publish release
+    needs: [validate, build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: plugins-*
+          merge-multiple: true
+          path: dist
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/*.zip \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes
