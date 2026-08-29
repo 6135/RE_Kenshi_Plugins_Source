@@ -46,10 +46,33 @@ branches, on `v*` tags, and on demand.
 - **validate** (Ubuntu) — package and data-pack checks, no toolchain needed.
 - **build** (Windows) — provisions the toolchain, builds all eight plugins,
   uploads one zip per plugin plus the PDBs as artifacts.
-- **release** (tags only) — attaches those zips to a *draft* GitHub release,
-  so the packages can be checked before anyone can download them. Publish it
-  from the repository's Releases page when it looks right; drop `--draft` from
-  the workflow to publish automatically instead.
+- **release** (release builds only) — attaches those zips to a *draft* GitHub
+  release, so the packages can be checked before anyone can download them.
+  Publish it from the repository's Releases page when it looks right; drop
+  `--draft` from the workflow to publish automatically instead.
+
+## Cutting a release
+
+Either route works:
+
+```bash
+git push origin main:release/1.0.0-rc4   # branch route
+git tag -a v1.0.0-rc4 -m "..." && git push origin v1.0.0-rc4   # tag route
+```
+
+The branch route is the one Bannerlord.BannerCraft uses, and it is the more
+portable of the two: pushing a tag needs write access to `refs/tags`, while a
+`release/x.y.z` branch push lets the release API create the tag itself (the
+workflow passes `--target` with the built commit). A branch named
+`release/1.0.0-rc4` produces the tag `v1.0.0-rc4`; a leading `v` is added when
+it is missing.
+
+Note that creating a tag through the GitHub web UI or API fires the `create`
+event rather than `push`, so it does **not** start this workflow. Push the tag
+from git, or use the branch route.
+
+The release step is re-runnable: if a release for the tag already exists its
+assets are replaced rather than the run failing.
 
 Each zip contains the mod folder exactly as it is installed, with the plugin's
 README, CHANGELOG and licence beside it.
